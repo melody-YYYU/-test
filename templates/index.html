@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>遺產地與緩衝區圖片感知相似匹配問卷</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        .question-container { margin-bottom: 40px; }
+        .image-container { display: flex; justify-content: center; gap: 20px; margin-top: 20px; }
+        .image-container img { width: 200px; height: auto; cursor: pointer; border: 3px solid transparent; }
+        .selected { border: 3px solid blue; }
+        button { margin-top: 20px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h2>請輸入用戶 ID 以登錄</h2>
+    <input type="number" id="user-id" placeholder="輸入用戶 ID">
+    <button id="login-btn">登錄</button>
+
+    <h2>請選擇與參考圖最相似的圖片</h2>
+
+    <div id="question-list"></div>
+    <button id="submit-btn" style="display:none;">提交</button>
+
+  <script>
+    let selections = {};
+    let userId = null;
+
+    // 用戶登錄並載入問卷
+    $("#login-btn").click(function() {
+        userId = $("#user-id").val().trim();
+        if (!userId) {
+            alert("請輸入用戶 ID！");
+            return;
+        }
+
+        $.ajax({
+            url: "/api/load_user",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ user_id: userId }),
+            success: function(response) {
+                alert(response.message);
+                selections = response.saved_choices || {};  // 存儲之前的選擇
+                fetchImageList();
+                $("#submit-btn").show();
+            },
+            error: function() {
+                alert("加載用戶數據失敗！");
+            }
+        });
+    });
+
+    function fetchImageList() {
+        $.ajax({
+            url: "/api/images",
+            type: "GET",
+            success: function(data) {
+                generateQuestions(data.images);
+            },
+            error: function() {
+                alert("無法加載圖片列表！");
+            }
+        });
+    }
+
+    function generateQuestions(imageList) {
+        let questionList = $("#question-list");
+        questionList.empty();
+
+        if (imageList.length === 0) {
+            questionList.append("<p>沒有可用的圖片。</p>");
+            return;
+        }
+
+        imageList.forEach((image, index) => {
+            let imageName = image.ref.split("/").pop();  // 獲取圖片名稱
+            let checkedP0 = selections[imageName] === "p0" ? "checked" : "";
+            let checkedP1 = selections[imageName] === "p1" ? "checked" : "";
+
+            let questionHTML = `
+                <div class="question-container">
+                    <h3>參考圖 ${index + 1}</h3>
+                    <img src="${image.ref}" alt="參考圖">
+                    <div class="image-container">
+                        <label>
+                            <input type="radio" name="choice-${index}" value="p0" data-img="${imageName}" ${checkedP0}>
+                            <img src="${image.p0}" alt="選項 1">
+                        </label>
+                        <label>
+                            <input type="radio" name="choice-${index}" value="p1" data-img="${imageName}" ${checkedP1}>
+                            <img src="${image.p1}" alt="選項 2">
+                        </label>
+                    </div>
+                </div>
+            `;
+            questionList.append(questionHTML);
+        });
+
+        // 監聽 radio 按鈕選擇
+        $("input[type='radio']").change(function() {
+            let imgName = $(this).data("img");
+            let choice = $(this).val();
+            selections[imgName] = choice;
+        });
+    }
+
+    $("#submit-btn").click(function() {
+        $.ajax({
+            url: "/api/submit",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({ user_id: userId, selections: selections }),
+            success: function(response) {
+                alert(response.message);
+            },
+            error: function() {
+                alert("提交問卷失敗！");
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
